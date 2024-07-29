@@ -1,6 +1,6 @@
 bin/*
 data/*
+output/*
 selenium
 venv
-output
 tmp
