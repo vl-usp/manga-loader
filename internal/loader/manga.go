@@ -55,6 +55,10 @@ func (l *MangaLoader) Load() error {
 		return err
 	}
 
+	if len(chapters) == 0 {
+		return fmt.Errorf("no chapters found")
+	}
+
 	manga.Chapters = chapters
 
 	err = l.saveManga(manga)
