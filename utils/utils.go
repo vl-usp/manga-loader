@@ -61,7 +61,7 @@ func DownloadImages(imagesUrls []string, dirpath string) error {
 // - error: an error if there was a problem downloading or saving the image.
 func DownloadImage(url string, filepath string) error {
 	// Log the start of the download
-	slog.Info("download: ", "url", url, " in image: ", filepath)
+	// slog.Info("download: ", "url", url, " in image: ", filepath)
 
 	// Send a GET request to the URL
 	resp, err := http.Get(url)
@@ -70,7 +70,10 @@ func DownloadImage(url string, filepath string) error {
 	time.Sleep(500 * time.Millisecond)
 
 	// Log the response status and other details
-	slog.Info("response", "status code", resp.StatusCode, "status", resp.Status, "content length", resp.ContentLength, "body", resp.Body)
+	// slog.Info("response", "status code", resp.StatusCode, "status", resp.Status, "content length", resp.ContentLength, "body", resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("response", "status code", resp.StatusCode, "status", resp.Status, "content length", resp.ContentLength, "body", resp.Body)
+	}
 
 	// Check for errors during the GET request
 	if err != nil {
@@ -164,13 +167,13 @@ func createImage(filepath string, data io.ReadCloser) error {
 	defer file.Close()
 
 	// Copy the data from the ReadCloser to the file
-	n, err := io.Copy(file, data)
+	_, err = io.Copy(file, data)
 	if err != nil {
 		return err
 	}
 
 	// Log the file path and the number of bytes written
-	slog.Info("image saved", "filepath", filepath, "written", n)
+	// slog.Info("image saved", "filepath", filepath, "written", n)
 
 	// Return nil if everything was successful
 	return nil
