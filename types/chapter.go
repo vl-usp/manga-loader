@@ -1,13 +1,12 @@
 package types
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strconv"
+)
 
 type ChaptersWrapper struct {
 	Data []Chapter `json:"data"`
-}
-
-type ChapterWrapper struct {
-	Data Chapter `json:"data"`
 }
 
 type Chapter struct {
@@ -31,15 +30,12 @@ func UnwrapChaptersJSON(input []byte) ([]Chapter, error) {
 	return wrapper.Data, nil
 }
 
-func UnwrapChapterJSON(input []byte) (Chapter, error) {
-	var wrapper ChapterWrapper
-
-	// Декодируем JSON в структуру
-	err := json.Unmarshal(input, &wrapper)
-	if err != nil {
-		return Chapter{}, err
+func FilterChapters(chapters []Chapter, volume int) []Chapter {
+	var filtered []Chapter
+	for _, chapter := range chapters {
+		if chapter.Volume == strconv.Itoa(volume) {
+			filtered = append(filtered, chapter)
+		}
 	}
-
-	// Кодируем структуру обратно в JSON
-	return wrapper.Data, nil
+	return filtered
 }

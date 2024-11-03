@@ -71,7 +71,7 @@ func main() {
 	}
 
 	// Get manga data from the API
-	l, err := loader.New(i.name)
+	l, err := loader.New(i.name, i.workerCnt, i.volume)
 	if err != nil {
 		slog.Error("loader init error: " + err.Error())
 		panic("loader init error")
