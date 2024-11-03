@@ -1,10 +1,9 @@
 MANGA_NAME = 8kaijuu
 VOL_NUM = 2
 WORKERS = 16
-DEBUG = false
 
 run: build
-	./bin/loader -name=$(MANGA_NAME) -vol_num=$(VOL_NUM) -workers=$(WORKERS) -debug=$(DEBUG)
+	./bin/loader -name=$(MANGA_NAME) -vol_num=$(VOL_NUM) -workers=$(WORKERS)
 
 build:
 	mkdir -p bin

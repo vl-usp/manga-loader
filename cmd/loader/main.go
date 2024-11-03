@@ -14,7 +14,6 @@ type Input struct {
 	ext       string
 	workerCnt int
 	volume    int
-	debugMode bool
 }
 
 // parseInput parses the command line flags and returns an Input struct.
@@ -24,7 +23,6 @@ func parseInput() (*Input, error) {
 	workerCntPtr := flag.Int("workers", 8, "worker count")
 	volNumPtr := flag.Int("vol_num", 1, "starting volume number")
 	extPtr := flag.String("ext", "cbz", "extension of output file")
-	debugMode := flag.Bool("debug", false, "debug mode")
 
 	// Parse command line flags
 	flag.Parse()
@@ -50,7 +48,6 @@ func parseInput() (*Input, error) {
 		volume:    *volNumPtr,
 		name:      *mangeNamePtr,
 		ext:       *extPtr,
-		debugMode: *debugMode,
 	}, nil
 }
 
