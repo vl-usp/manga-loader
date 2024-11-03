@@ -1,6 +1,6 @@
 MANGA_NAME = 8kaijuu
 VOL_NUM = 2
-WORKERS = 8
+WORKERS = 16
 DEBUG = false
 
 run: build

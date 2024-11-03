@@ -22,6 +22,11 @@ type MangaLoader struct {
 	client *cloudscraper.CloudScrapper
 }
 
+type chapterJob struct {
+	chapter types.Chapter
+	err     error
+}
+
 func New(mangaSlug string, workers int, volume int, extension string) (*MangaLoader, error) {
 	c, err := cloudscraper.Init(false, false)
 	if err != nil {
@@ -52,46 +57,7 @@ func (l *MangaLoader) Load() error {
 
 	manga.Chapters = chapters
 
-	// TODO: make it concurrent
-	for i, chapter := range manga.Chapters {
-		time.Sleep(500 * time.Millisecond)
-
-		pages, err := l.fetchChapterPages(chapter.Volume, chapter.Number)
-		if err != nil {
-			return err
-		}
-
-		manga.Chapters[i].Pages = pages
-	}
-
 	err = l.saveManga(manga)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (l *MangaLoader) saveManga(manga *types.Manga) error {
-	rootDir := "output"
-	dir := fmt.Sprintf("%s/%s", rootDir, manga.Name)
-
-	// TODO: make it concurrent
-	for _, c := range manga.Chapters {
-		for _, p := range c.Pages {
-			err := utils.DownloadImage(l.imageURL+p.URL, fmt.Sprintf("%s/%d/%s/%s", dir, l.volume, c.Number, utils.GetImageName(p.URL)))
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	err := utils.CompressDirectory(fmt.Sprintf("%s/%s_%d_vol.%s", rootDir, manga.Name, l.volume, l.extension), dir)
-	if err != nil {
-		return err
-	}
-
-	err = utils.DeleteDirectory(dir)
 	if err != nil {
 		return err
 	}
@@ -132,7 +98,6 @@ func (l *MangaLoader) fetchChapters() ([]types.Chapter, error) {
 
 	chapters, err := types.UnwrapChaptersJSON([]byte(res.Body))
 	if err != nil {
-		// Выводим тело при ошибке декодирования
 		slog.Error("response body", "body", res.Body)
 		return nil, fmt.Errorf("failed to unmarshal chapters: %w", err)
 	}
@@ -144,10 +109,16 @@ func (l *MangaLoader) fetchChapters() ([]types.Chapter, error) {
 
 	slog.Info("chapters filtered", "count", len(chapters))
 
+	// Fetch chapter pages concurrently
+	chapters, err = l.fetchChapterPages(chapters)
+	if err != nil {
+		return nil, err
+	}
+
 	return chapters, nil
 }
 
-func (l *MangaLoader) fetchChapterPages(volume, chapter string) ([]types.Page, error) {
+func (l *MangaLoader) fetchChapterPagesWorker(volume, chapter string) ([]types.Page, error) {
 	chapterUrl := fmt.Sprintf("%s/chapter?number=%s&volume=%s", l.mangaURL, chapter, volume)
 	res, err := l.client.Get(chapterUrl, make(map[string]string), "")
 	if err != nil {
@@ -166,4 +137,117 @@ func (l *MangaLoader) fetchChapterPages(volume, chapter string) ([]types.Page, e
 	slog.Info("pages loaded", "volume", volume, "chapter", chapter, "count", len(pages))
 
 	return pages, nil
+}
+
+func (l *MangaLoader) fetchChapterPages(chapters []types.Chapter) ([]types.Chapter, error) {
+	jobs := make(chan chapterJob, len(chapters))
+	results := make(chan chapterJob, len(chapters))
+	defer close(results)
+
+	// start workers
+	for i := 1; i < l.workers; i++ {
+		go func(id int, jobs <-chan chapterJob, results chan<- chapterJob) {
+			for job := range jobs {
+				slog.Info("fetch chapter pages worker", "id", id, "chapter_num", job.chapter.Number, "volume", job.chapter.Volume)
+				pages, err := l.fetchChapterPagesWorker(job.chapter.Volume, job.chapter.Number)
+				if err != nil {
+					slog.Error("fetch chapter pages error: " + err.Error())
+					job.err = err
+				}
+
+				job.chapter.Pages = pages
+				results <- job
+
+				time.Sleep(500 * time.Millisecond)
+			}
+		}(i, jobs, results)
+	}
+
+	// send jobs
+	for _, chapter := range chapters {
+		jobs <- chapterJob{
+			chapter: chapter,
+		}
+	}
+	close(jobs)
+
+	out := make([]types.Chapter, 0, len(chapters))
+	// get results
+	for i := 0; i < len(chapters); i++ {
+		result := <-results
+		if result.err != nil {
+			return nil, result.err
+		}
+		out = append(out, result.chapter)
+	}
+
+	return out, nil
+}
+
+func (l *MangaLoader) saveChapterWorker(chapter types.Chapter, dirpath string) error {
+	for _, page := range chapter.Pages {
+		filepath := fmt.Sprintf("%s/%d/%s/%s", dirpath, l.volume, chapter.Number, utils.GetImageName(page.URL))
+		err := utils.DownloadImage(l.imageURL+page.URL, filepath)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (l *MangaLoader) saveManga(manga *types.Manga) error {
+	rootDir := "output"
+	dir := fmt.Sprintf("%s/%s", rootDir, manga.Name)
+
+	jobs := make(chan chapterJob, len(manga.Chapters))
+	results := make(chan chapterJob, len(manga.Chapters))
+	defer close(results)
+
+	// start workers
+	for i := 1; i < l.workers; i++ {
+		go func(id int, jobs <-chan chapterJob, results chan<- chapterJob) {
+			for job := range jobs {
+				slog.Info("save chapter worker", "id", id, "chapter_num", job.chapter.Number, "volume", job.chapter.Volume)
+				err := l.saveChapterWorker(job.chapter, dir)
+				if err != nil {
+					slog.Error("save chapter error: " + err.Error())
+					job.err = err
+				}
+				results <- job
+
+				time.Sleep(500 * time.Millisecond)
+			}
+		}(i, jobs, results)
+	}
+
+	// send jobs
+	for _, chapter := range manga.Chapters {
+		jobs <- chapterJob{
+			chapter: chapter,
+		}
+	}
+	close(jobs)
+
+	// get results from workers
+	for i := 0; i < len(manga.Chapters); i++ {
+		result := <-results
+		if result.err != nil {
+			return result.err
+		}
+	}
+
+	// compress
+	err := utils.CompressDirectory(fmt.Sprintf("%s/%s_%d_vol.%s", rootDir, manga.Name, l.volume, l.extension), dir)
+	if err != nil {
+		return err
+	}
+
+	// cleanup
+	err = os.RemoveAll(dir)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
