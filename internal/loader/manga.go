@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"mangalib-loader/types"
+	"mangalib-loader/utils"
 	"net/http"
 	"os"
 	"time"
@@ -12,62 +13,93 @@ import (
 )
 
 type MangaLoader struct {
-	mangaURL string
-	workers  int
-	volume   int
+	mangaURL  string
+	imageURL  string
+	workers   int
+	volume    int
+	extension string
 
 	client *cloudscraper.CloudScrapper
 }
 
-func New(mangaSlug string, workers int, volume int) (*MangaLoader, error) {
+func New(mangaSlug string, workers int, volume int, extension string) (*MangaLoader, error) {
 	c, err := cloudscraper.Init(false, false)
 	if err != nil {
 		return nil, err
 	}
 
 	return &MangaLoader{
-		mangaURL: fmt.Sprintf("%s/manga/%s", os.Getenv("API_URL"), mangaSlug),
-		workers:  workers,
-		volume:   volume,
+		mangaURL:  fmt.Sprintf("%s/manga/%s", os.Getenv("API_URL"), mangaSlug),
+		imageURL:  os.Getenv("IMAGE_URL"),
+		workers:   workers,
+		volume:    volume,
+		extension: extension,
 
 		client: c,
 	}, nil
 }
 
-func (l *MangaLoader) Load() (*types.Manga, error) {
-	manga, err := l.getManga()
+func (l *MangaLoader) Load() error {
+	manga, err := l.fetchManga()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	chapters, err := l.getChapters()
+	chapters, err := l.fetchChapters()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	manga.Chapters = chapters
 
-	// конкурентность
+	// TODO: make it concurrent
 	for i, chapter := range manga.Chapters {
 		time.Sleep(500 * time.Millisecond)
 
-		pages, err := l.getChapterPages(chapter.Volume, chapter.Number)
+		pages, err := l.fetchChapterPages(chapter.Volume, chapter.Number)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		manga.Chapters[i].Pages = pages
 	}
 
-	return manga, nil
-}
-
-func (l *MangaLoader) SaveManga() error {
+	err = l.saveManga(manga)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
-func (l *MangaLoader) getManga() (*types.Manga, error) {
+func (l *MangaLoader) saveManga(manga *types.Manga) error {
+	rootDir := "output"
+	dir := fmt.Sprintf("%s/%s", rootDir, manga.Name)
+
+	// TODO: make it concurrent
+	for _, c := range manga.Chapters {
+		for _, p := range c.Pages {
+			err := utils.DownloadImage(l.imageURL+p.URL, fmt.Sprintf("%s/%d/%s/%s", dir, l.volume, c.Number, utils.GetImageName(p.URL)))
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	err := utils.CompressDirectory(fmt.Sprintf("%s/%s_%d_vol.%s", rootDir, manga.Name, l.volume, l.extension), dir)
+	if err != nil {
+		return err
+	}
+
+	err = utils.DeleteDirectory(dir)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (l *MangaLoader) fetchManga() (*types.Manga, error) {
 	res, err := l.client.Get(l.mangaURL, make(map[string]string), "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get manga: %w", err)
@@ -88,7 +120,7 @@ func (l *MangaLoader) getManga() (*types.Manga, error) {
 	return &manga, nil
 }
 
-func (l *MangaLoader) getChapters() ([]types.Chapter, error) {
+func (l *MangaLoader) fetchChapters() ([]types.Chapter, error) {
 	res, err := l.client.Get(l.mangaURL+"/chapters", make(map[string]string), "")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chapters: %w", err)
@@ -115,7 +147,7 @@ func (l *MangaLoader) getChapters() ([]types.Chapter, error) {
 	return chapters, nil
 }
 
-func (l *MangaLoader) getChapterPages(volume, chapter string) ([]types.Page, error) {
+func (l *MangaLoader) fetchChapterPages(volume, chapter string) ([]types.Page, error) {
 	chapterUrl := fmt.Sprintf("%s/chapter?number=%s&volume=%s", l.mangaURL, chapter, volume)
 	res, err := l.client.Get(chapterUrl, make(map[string]string), "")
 	if err != nil {

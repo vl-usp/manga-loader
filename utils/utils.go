@@ -151,10 +151,10 @@ func createFolder(path string) error {
 // the error. Otherwise, it returns nil.
 func createImage(filepath string, data io.ReadCloser) error {
 	// Prepare the directory for the file
-	dirpath, _ := prepareDir(filepath)
+	prepareDir(filepath)
 
 	// Log the directory path
-	slog.Info("saving image", "dirpath", dirpath)
+	// slog.Info("saving image", "dirpath", dirpath)
 
 	// Create the file
 	file, err := os.Create(filepath)
@@ -286,4 +286,8 @@ func addFilesToZip(w *zip.Writer, basePath, baseInZip string) error {
 	}
 
 	return nil
+}
+
+func DeleteDirectory(path string) error {
+	return os.RemoveAll(path)
 }
