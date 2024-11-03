@@ -1,10 +1,10 @@
-VOL_FROM = 1
-VOL_TO = 1
+MANGA_NAME = 8kaijuu
+VOL_NUM = 1
 WORKERS = 8
 DEBUG = false
 
 run: build
-	./bin/downloader -json=./data/$(MANGA_NAME)/manga.json -from=$(VOL_FROM) -to=$(VOL_TO) -workers=$(WORKERS) -debug=$(DEBUG)
+	./bin/loader -name=$(MANGA_NAME) -vol_num=$(VOL_NUM) -workers=$(WORKERS) -debug=$(DEBUG)
 
 build:
-	go build -C downloader -o ../bin/downloader main.go
+	go build -o ./bin/loader cmd/loader/main.go
