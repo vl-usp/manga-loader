@@ -83,7 +83,6 @@ func (l *MangaLoader) fetchManga() (*types.Manga, error) {
 
 	manga, err := types.UnwrapMangaJSON([]byte(res.Body))
 	if err != nil {
-		// Выводим тело при ошибке декодирования
 		return nil, fmt.Errorf("failed to unmarshal response body: %w", err)
 	}
 

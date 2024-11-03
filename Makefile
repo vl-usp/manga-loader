@@ -8,4 +8,4 @@ run: build
 build:
 	mkdir -p bin
 	mkdir -p output
-	go build -o ./bin/loader cmd/loader/main.go
+	go build -o ./bin/loader main.go

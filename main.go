@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"mangalib-loader/internal/loader"
+	"mangalib-loader/loader"
 
 	"github.com/joho/godotenv"
 )
